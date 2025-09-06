@@ -4,7 +4,7 @@ pipeline {
   environment {
     ANSIBLE_MASTER = '34.229.120.195'   // <-- Ansible Master IP/hostname
     REMOTE_DIR     = '/opt/playbooks'   // <-- directory for playbooks
-    REMOTE_USER    = 'ansible'          // <-- SSH user on Ansible Master
+    REMOTE_USER    = 'root'          // <-- SSH user on Ansible Master
   }
 
   stages {
