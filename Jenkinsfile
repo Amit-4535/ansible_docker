@@ -2,45 +2,56 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE   = "amit4535/nginx-custom"   // your DockerHub repo name
-        DOCKER_TAG     = "v1"                     // version tag
-        CONTAINER_NAME = "nginx_container"        // container you already created
-        REGISTRY_CRED  = "dockerhub-cred"         // Jenkins credentials ID for DockerHub
+        // DockerHub credentials (saved in Jenkins Credentials store)
+        DOCKER_HUB_USER = credentials('dockerhub-user')
+        DOCKER_HUB_PASS = credentials('dockerhub-pass')
     }
 
     stages {
-        stage('Checkout') {
+        stage('Checkout Repo') {
             steps {
                 git branch: 'master', url: 'https://github.com/Amit-4535/ansible_docker.git'
             }
         }
 
-        stage('Commit Container as Image') {
+        stage('Copy Playbook to Ansible Master') {
             steps {
-                sh '''
-                    echo "📦 Committing running container ${CONTAINER_NAME} as new image..."
-                    docker commit ${CONTAINER_NAME} ${DOCKER_IMAGE}:${DOCKER_TAG}
-                '''
-            }
-        }
-
-        stage('Login to DockerHub') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: "${REGISTRY_CRED}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                sshagent(['ansible-ssh']) {
                     sh '''
-                        echo "🔑 Logging into DockerHub..."
-                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                        echo "📂 Copying playbook to Ansible Master..."
+                        ssh -o StrictHostKeyChecking=no root@34.229.120.195 "mkdir -p /opt/playbooks"
+                        scp -o StrictHostKeyChecking=no apache2.yml root@34.229.120.195:/opt/playbooks/
                     '''
                 }
             }
         }
 
-        stage('Push Image') {
+        stage('Run Playbook on Ansible Master') {
             steps {
-                sh '''
-                    echo "🚀 Pushing image ${DOCKER_IMAGE}:${DOCKER_TAG}..."
-                    docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
-                '''
+                sshagent(['ansible-ssh']) {
+                    sh '''
+                        echo "🚀 Running playbook from Ansible Master..."
+                        ssh -o StrictHostKeyChecking=no root@34.229.120.195 "
+                            ansible-playbook -i /etc/ansible/hosts /opt/playbooks/apache2.yml
+                        "
+                    '''
+                }
+            }
+        }
+
+        stage('Commit & Push Container from Managed Node') {
+            steps {
+                sshagent(['ansible-ssh']) {
+                    sh '''
+                        echo "📦 Committing running container on Managed Node..."
+                        ssh -o StrictHostKeyChecking=no root@172.31.21.93 "
+                            docker commit nginx_container amit4535/nginx-custom:v1 &&
+                            echo '🔑 Logging into DockerHub...' &&
+                            docker login -u ${DOCKER_HUB_USER} -p ${DOCKER_HUB_PASS} &&
+                            docker push amit4535/nginx-custom:v1
+                        "
+                    '''
+                }
             }
         }
     }
