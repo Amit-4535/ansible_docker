@@ -1,39 +1,40 @@
 pipeline {
   agent any
+
+  environment {
+    ANSIBLE_MASTER = '34.229.120.195'          // <-- change to your Ansible master IP/hostname
+    REMOTE_DIR     = '/home/ansible'      // <-- where you want the file to live
+    REMOTE_USER    = 'ansible'            // <-- SSH user on Ansible master
+  }
+
   stages {
-    stage ('checkout stage') {
+    stage('Checkout') {
       steps {
-        git 'https://github.com/Amit-4535/ansible_docker.git'
+        // Use your repo/branch as needed
+        git branch: 'master', url: 'https://github.com/Amit-4535/ansible_docker.git'
       }
     }
-    stage ('build stage') {
+
+    stage('Copy playbook to Ansible Master') {
       steps {
-        echo "running build step"
+        // Use the SSH key stored in Jenkins credentials
+        sshagent(credentials: ['ansible-ssh']) {
+          sh '''
+            set -euo pipefail
+
+            # Ensure the playbook exists in the repo
+            test -f apache2.yml
+
+            # Create target dir on remote and copy file
+            ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${ANSIBLE_MASTER} "mkdir -p ${REMOTE_DIR}"
+            scp -o StrictHostKeyChecking=no apache2.yml ${REMOTE_USER}@${ANSIBLE_MASTER}:${REMOTE_DIR}/
+
+            # (Optional) verify on remote
+            ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${ANSIBLE_MASTER} "ls -l ${REMOTE_DIR}/apache2.yml"
+          '''
+        }
       }
     }
-    stage ('test stage') {
-      steps {
-        echo "running test step"
-      }
-    }
-    stage ('deploy stage') {
-      steps {
-        echo "running deploy step"
-      }
-    }
-    stage ('creating Folder') {
-      steps {
-        sh 'mkdir -p project'
-      }
-    }
-    stage ('creating file') {
-      steps {
-        sh 'echo "hello from the demo file" > project/demo.txt'
-      }
-    }
-   }
+  }
 }
 
-
-
- 
